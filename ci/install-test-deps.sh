@@ -36,3 +36,22 @@ fi
 rustup update "$channel" --no-self-update
 rustup default "$channel"
 rustup target add "$target"
+
+# `i686-pc-windows-gnu` lost its host tools in rust-lang/rust#161681, so it is
+# now built from an `x86_64-pc-windows-gnu` host. Cross-linking needs a 32-bit
+# MinGW, which the runner image's software list does not include. MSYS2 does
+# ship on the image, so install it from there.
+if [ "$target" = "i686-pc-windows-gnu" ]; then
+    mingw32_bin="C:/msys64/mingw32/bin"
+
+    /c/msys64/usr/bin/pacman -Sy --noconfirm --needed mingw-w64-i686-gcc
+
+    # `mingw32/bin` has to go on PATH ahead of everything else, not just be
+    # named as the linker. Its gcc loads libisl/libmpc/libgmp/zlib from there,
+    # and the image already has 64-bit DLLs of those names on PATH, which a
+    # 32-bit process cannot load. Scoped to this job, so the 64-bit gnu job is
+    # unaffected.
+    echo "$mingw32_bin" >> "${GITHUB_PATH:-/dev/null}"
+    echo "CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER=$mingw32_bin/i686-w64-mingw32-gcc.exe" \
+        >> "${GITHUB_ENV:-/dev/null}"
+fi
